@@ -1,8 +1,10 @@
 import re
 import sys
+import pickle
 
 from nltk.tokenize import word_tokenize
 import xml.etree.ElementTree as ET
+from collections import Counter
 
 
 def parse_train(in_filename1, in_filename2, out_filename1, out_filename2, max_len=100):
@@ -70,5 +72,22 @@ def process_raw_data():
         parse_xml(in_filename1, in_filename2, out_filename1, out_filename2)
 
 
+def build_vocab():
+    train_filename = sys.argv[1]
+    out_filename = sys.argv[2]
+    min_count = int(sys.argv[3])
+
+    vocab = Counter()
+    with open(train_filename, 'r') as f:
+        for line in f:
+            vocab.update(line.strip().split())
+    print(len(vocab))
+
+    vocab = [w for w, c in vocab.items() if c >= min_count]
+    print(len(vocab))
+    pickle.dump(vocab, open(out_filename, 'wb'))
+
+
 if __name__ == '__main__':
     process_raw_data()
+    build_vocab()
