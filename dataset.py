@@ -1,6 +1,5 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
-from torch.autograd import Variable
 from collections import Counter
 import numpy as np
 from functools import partial
@@ -23,7 +22,7 @@ class NMTDataset(Dataset):
         vocab = Counter()
         for sent in corpus:
             vocab.update(sent)
-        vocab = {w:i+4 for i, w in enumerate(vocab)}
+        vocab = {w:i+4 for w,i in vocab.items()}
         vocab['<PAD>'] = 0
         vocab['<SOS>'] = 1
         vocab['<EOS>'] = 2
@@ -36,19 +35,21 @@ class NMTDataset(Dataset):
             corpus = [['<SOS>'] + sent + ['<EOS>'] for sent in corpus]
             return corpus, self._vocab_from_corpus(corpus)
 
-        new_vocab = {'<PAD>':0, '<SOS>':1, '<EOS>':2, '<OOV>':3}
-        for i, w in enumerate(vocab):
-            new_vocab[w] = i + 4
+        vocab = {w:i+4 for w,i in vocab.items()}
+        vocab['<PAD>'] = 0
+        vocab['<SOS>'] = 1
+        vocab['<EOS>'] = 2
+        vocab['<OOV>'] = 3
 
         converted = []
         for sent in corpus:
             converted.append([])
             for w in ['<SOS>'] + sent + ['<EOS>']:
-                if w in new_vocab:
+                if w in vocab:
                     converted[-1].append(w)
                 else:
                     converted[-1].append('<OOV>')
-        return converted, new_vocab
+        return converted, vocab
 
 
     def _corpus2idx(self, corpus, vocab):
@@ -73,13 +74,14 @@ def collate(samples):
         for i in range(len(seq)):
             seq[i] = np.pad(seq[i], (0, max_len-len(seq[i])), 
                     'constant', constant_values=0)
-        return np.array(seq)
+        return np.array(seq), np.array(lens, dtype=np.int)
 
     src, ref = [list(x) for x in zip(*samples)]
-    src = _pad_idx(src)
-    ref = _pad_idx(ref)
+    src, src_len = _pad_idx(src)
+    order = np.flip(np.argsort(src_len), 0) # sort descendantly
+    ref, ref_len = _pad_idx(ref)
     
-    return Variable(torch.LongTensor(src)), Variable(torch.LongTensor(ref))
+    return src[order], src_len[order], ref[order], ref_len[order]
 
 
 NMTDataLoader = partial(
@@ -96,28 +98,3 @@ def load_data(filename):
             data.append(line.strip().split())
     return data
 
-
-if __name__ == '__main__':
-    ''' test only '''
-    import sys
-    import pickle
-
-    src = load_data(sys.argv[1])
-    ref = load_data(sys.argv[2])
-    vocab = pickle.load(open(sys.argv[3], 'rb'))
-    vocab = {w:i for i, w in enumerate(vocab)}
-
-    dataset = NMTDataset(src, ref, None, vocab)
-    dataloader = NMTDataLoader(dataset, batch_size=8, num_workers=0, shuffle=True)
-
-    src_ivocab = {i:w for w,i in dataset.src_vocab.items()}
-    ref_ivocab = {i:w for w,i in dataset.ref_vocab.items()}
-    for src, ref in dataloader:
-        print(len(src), len(ref))
-        src = src.data.numpy()
-        ref = ref.data.numpy()
-        for i in range(len(src)):
-            print(len(src[i]), len(ref[i]))
-            print(' '.join([src_ivocab[j] for j in src[i]]))
-            print(' '.join([ref_ivocab[j] for j in ref[i]]))
-        break

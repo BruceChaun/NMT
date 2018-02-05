@@ -19,13 +19,26 @@ class Config(object):
 
         self.cuda = torch.cuda.is_available()
 
-        self.n_grams = 4
+        self.vocab_sizes = [53, 499, 997, 2003]
+        self.teaching_ratio = 0.2
+        self.epochs = 10
+        self.batch_size = 64
+        self.beam = 5
 
 
 class RNNConfig(Config):
 
     def __init__(self, data_folder, src_lang, ref_lang):
         Config.__init__(self, data_folder, src_lang, ref_lang)
+
+        self.lr = 0.01
+        self.encoder_emb_size = 50
+        self.decoder_emb_size = 300
+        self.hid_dim = 200
+        self.encoder_layers = 2
+        self.decoder_layers = 1
+        self.encoder_dropout = 0.3
+        self.decoder_dropout = 0.3
 
 
 class CNNConfig(Config):
@@ -38,3 +51,4 @@ class AttnConfig(Config):
 
     def __init__(self, data_folder, src_lang, ref_lang):
         Config.__init__(self, data_folder, src_lang, ref_lang)
+

@@ -85,9 +85,26 @@ def build_vocab():
 
     vocab = [w for w, c in vocab.items() if c >= min_count]
     print(len(vocab))
+    vocab = {w:i for i,w in enumerate(vocab)}
+    pickle.dump(vocab, open(out_filename, 'wb'))
+
+
+def build_all_vocab():
+    sets = ('.train', '.dev', '.tst')
+    lang = sys.argv[1]
+    out_filename = sys.argv[2]
+
+    vocab = Counter()
+    for suffix in sets:
+        with open(lang+suffix, 'r') as f:
+            for line in f:
+                vocab.update(line.strip().split())
+    print(len(vocab))
+    vocab = {w:i for i,w in enumerate(vocab)}
     pickle.dump(vocab, open(out_filename, 'wb'))
 
 
 if __name__ == '__main__':
     process_raw_data()
     build_vocab()
+    build_all_vocab()
