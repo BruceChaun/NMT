@@ -3,6 +3,8 @@ import torch.nn as nn
 from torch.autograd import Variable
 import torch.nn.functional as F
 
+import math
+
 
 class Dense(nn.Module):
 
@@ -12,6 +14,9 @@ class Dense(nn.Module):
         self.fc = nn.ModuleList(
                 [nn.Linear(layers[i], layers[i+1]) for i in range(len(layers)-1)]
                 )
+
+        for i in range(len(layers)-1):
+            self.fc[i].weight.data.normal_(0, math.sqrt(1. / layers[i]))
 
 
     def forward(self, x):
@@ -45,6 +50,12 @@ class RNNDecoder(nn.Module):
 
 
     def forward(self, x, h, encoder_out):
+        '''
+        x: LongTensor, current input, (batch_size, 1)
+        h: FloatTensor, previous hidden state of decoder
+        encoder_out: FloatTensor, output representation of encoder, 
+           (batch_size, seq_len, feature_dim)
+        '''
         x = self.embedding(x)
         batch_size, encoder_len, dim = encoder_out.size()
 
@@ -54,9 +65,9 @@ class RNNDecoder(nn.Module):
 
         last_hidden = h[-1]
         for i in range(encoder_len):
-            betas[:,i] = F.softmax(self.attn(
+            betas[:,i] = self.attn(
                 torch.cat((last_hidden, encoder_out[:,i,:]), dim=1)
-                ))
+                )
         attn_weights = F.softmax(betas).unsqueeze(dim=1)
         context = attn_weights.bmm(encoder_out)
 
@@ -68,4 +79,76 @@ class RNNDecoder(nn.Module):
             ))
 
         return output, h, attn_weights
+
+
+class CNNDecoder(nn.Module):
+
+    def __init__(self, 
+            emb_size, 
+            vocab_size, 
+            kernels, 
+            dropout):
+        '''
+        emb_size: int
+        vocab_size: int
+        kernels: list of int
+        dropout: float
+        '''
+        nn.Module.__init__(self)
+
+        self.emb_size = emb_size
+        self.kernels = kernels
+        self.dropout = dropout
+
+        self.embedding = nn.Embedding(vocab_size, emb_size, padding_idx=0)
+        self.out = Dense([emb_size, vocab_size])
+
+        self.convs = []
+        for k in kernels:
+            conv = nn.Conv1d(emb_size, emb_size * 2, k, padding=k-1)
+            std = math.sqrt(4. * (1 - dropout) / (k * emb_size))
+            conv.weight.data.normal_(0, std)
+            conv.bias.data.zero_()
+            self.convs.append(nn.utils.weight_norm(conv, dim=2))
+
+        self.convs = nn.ModuleList(self.convs)
+
+
+    def forward(self, x, encoder_out):
+        '''
+        x: previously generated elements by decoder
+        encoder_out: FloatTensor, final layer output of encoder
+        '''
+        target = self.embedding(x).transpose(1,2)
+        x = target
+        n_layers = len(self.kernels)
+
+        for l in range(n_layers):
+            k = self.kernels[l]
+            residual = x
+
+            # Eq. 1
+            x = F.dropout(x, self.dropout, self.training)
+            x = self.convs[l](x)[:,:,:1-k]
+            x = F.glu(x, 1)
+            residual_attn = x
+            x = (x + target) * math.sqrt(0.5)
+
+            # Eq. 2, attention
+            x = x.transpose(1, 2)
+            attn = x.bmm(encoder_out)
+            sz = attn.size()
+            attn = F.softmax(attn.view(sz[0] * sz[1], sz[2]))
+            attn = attn.view(sz).transpose(1,2)
+
+            # Eq. 3, conditional input
+            x = torch.bmm(encoder_out, attn)
+            x = x * math.sqrt(encoder_out.size(2))
+
+            # residual
+            x = (x + residual_attn) * math.sqrt(0.5)
+            x = (x + residual) * math.sqrt(0.5)
+
+        out = F.log_softmax(self.out(x[:,:,-1]))
+        return out
 

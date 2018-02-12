@@ -46,6 +46,14 @@ class CNNConfig(Config):
     def __init__(self, data_folder, src_lang, ref_lang):
         Config.__init__(self, data_folder, src_lang, ref_lang)
 
+        self.lr = 0.001
+        self.encoder_emb_size = 64
+        self.decoder_emb_size = 256
+        self.encoder_kernels = [3] * 9
+        self.decoder_kernels = [5] * 5
+        self.encoder_dropout = 0.2
+        self.decoder_dropout = 0.2
+
 
 class AttnConfig(Config):
 

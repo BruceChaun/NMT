@@ -34,6 +34,7 @@ def evaluate_rnn(encoder, decoder, dataloader, beam, max_len=150):
         encoder_out, enc_h = encoder(src, enc_h, src_len)
         dec_h = enc_h[-2:-1] # last forward layer in encoder
 
+        '''
         # greedy search
         candidate = np.zeros([batch_size, max_len], dtype=int)
         for i in range(max_len):
@@ -42,11 +43,14 @@ def evaluate_rnn(encoder, decoder, dataloader, beam, max_len=150):
             _, decoder_input = decoder_out.data.topk(1)
             candidate[:,i:i+1] = decoder_input.cpu().numpy()
             decoder_input = Variable(decoder_input)
+        '''
 
-        '''candidate = torch.zeros([batch_size, beam, max_len]).long()
+        # beam search
+        candidate = torch.zeros([batch_size, beam, max_len]).long()
 
         decoder_input = Variable(torch.ones([batch_size, beam, 1]).long())
         prob_matrix = torch.zeros([batch_size, beam])
+        dec_hs = torch.cat([dec_h.unsqueeze(0)] * beam)
         for i in range(max_len):
             if cuda:
                 decoder_input = decoder_input.cuda()
@@ -54,9 +58,8 @@ def evaluate_rnn(encoder, decoder, dataloader, beam, max_len=150):
             tmp_prob = torch.zeros([batch_size, beam**2])
             indices = torch.zeros([batch_size, beam**2])
             for b in range(beam):
-                h = copy.deepcopy(dec_h)
-                decoder_out, h, attn_weights = decoder(
-                        decoder_input[:,b,:], h, encoder_out)
+                decoder_out, dec_hs[b], _ = decoder(
+                        decoder_input[:,b,:], dec_hs[b], encoder_out)
                 topv, topi = decoder_out.data.topk(beam)
                 tmp_prob[:,b*beam:(b+1)*beam] = prob_matrix + topv
                 indices[:,b*beam:(b+1)*beam] = topi
@@ -65,7 +68,9 @@ def evaluate_rnn(encoder, decoder, dataloader, beam, max_len=150):
             for batch in range(batch_size):
                 candidate[batch,:,i] = indices[batch].index_select(0, topi[batch])
             decoder_input = Variable(candidate[:,:,i:i+1])
-        '''
+
+        candidate = candidate[:,0,:]
+
         src_seqs = []
         ref_seqs = []
         cand_seqs = []
@@ -75,6 +80,77 @@ def evaluate_rnn(encoder, decoder, dataloader, beam, max_len=150):
             src_seq = utils.convert2seq(src[i], src_vocab)
             ref_seq = utils.convert2seq(ref[i,1:], ref_vocab)
             cand_seq = utils.convert2seq(candidate[i], ref_vocab)
+            src_seqs.append(' '.join(src_seq))
+            ref_seqs.append(' '.join(ref_seq))
+            cand_seqs.append(' '.join(cand_seq))
+            if len(cand_seq) == 0:
+                bleus.append(0)
+            else:
+                bleus.append(100 * 
+                        bleu.compute_bleu([[ref_seq]], [cand_seq])[0])
+
+        yield (src_seqs, ref_seqs, cand_seqs, bleus)
+
+
+def evaluate_cnn(encoder, decoder, dataloader, beam, max_len=150):
+    cuda = torch.cuda.is_available()
+    encoder.eval()
+    decoder.eval()
+    src_vocab = {i:w for w,i in dataloader.dataset.src_vocab.items()}
+    ref_vocab = {i:w for w,i in dataloader.dataset.ref_vocab.items()}
+
+    for src, src_len, ref, ref_len in dataloader:
+        src = Variable(torch.LongTensor(src), volatile=True)
+        batch_size, src_max_len = src.size()
+
+        if cuda:
+            src = src.cuda()
+
+        encoder_out, e = encoder(src)
+
+        '''
+        # greedy search
+        candidate = torch.zeros([batch_size, max_len]).long()
+        candidate[:,0] = 1
+        for i in range(1, max_len):
+            decoder_input = Variable(candidate[:,:i])
+            decoder_out  = decoder(decoder_input, encoder_out)
+            _, topi = decoder_out.data.topk(1)
+            candidate[:,i:i+1] = topi
+        '''
+
+        # beam search
+        candidate = torch.zeros([batch_size, beam, max_len]).long()
+        candidate[:,:,0] = 1
+        prob_matrix = torch.zeros([batch_size, beam])
+        for i in range(1, max_len):
+            decoder_input = Variable(candidate[:,:,:i])
+            if cuda:
+                decoder_input = decoder_input.cuda()
+
+            tmp_prob = torch.zeros([batch_size, beam**2])
+            indices = torch.zeros([batch_size, beam**2])
+            for b in range(beam):
+                decoder_out = decoder(decoder_input[:,b,:], encoder_out)
+                topv, topi = decoder_out.data.topk(beam)
+                tmp_prob[:,b*beam:(b+1)*beam] = prob_matrix + topv
+                indices[:,b*beam:(b+1)*beam] = topi
+
+            prob_matrix, topi = tmp_prob.topk(beam)
+            for batch in range(batch_size):
+                candidate[batch,:,i] = indices[batch].index_select(0, topi[batch])
+
+        candidate = candidate[:,0,:]
+
+        src_seqs = []
+        ref_seqs = []
+        cand_seqs = []
+        bleus = []
+        src = src.data.cpu().numpy()
+        for i in range(batch_size):
+            src_seq = utils.convert2seq(src[i,1:], src_vocab)
+            ref_seq = utils.convert2seq(ref[i,1:], ref_vocab)
+            cand_seq = utils.convert2seq(candidate[i,1:], ref_vocab)
             src_seqs.append(' '.join(src_seq))
             ref_seqs.append(' '.join(ref_seq))
             cand_seqs.append(' '.join(cand_seq))

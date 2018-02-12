@@ -2,7 +2,9 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
+import torch.nn.functional as F
 
+import math
 import hashlib
 
 
@@ -28,6 +30,10 @@ class N_Gram_Embedding(nn.Module):
                 [nn.Embedding(4, emb_size*self.n, padding_idx=0)] + 
                 [nn.Embedding(size+1, emb_size, padding_idx=0) for size in vocab_sizes]
                 )
+
+        # initialize weights
+        for i in range(len(self.embeddings)):
+            self.embeddings[i].weight.data.normal_(0, 0.1)
 
 
     def _hash(self, s):
@@ -113,4 +119,74 @@ class RNNEncoder(nn.Module):
         output, h = self.gru(packed_seq, h)
         output, out_len = pad_packed_sequence(output, True)
         return output, h
+
+##
+# Credit
+# https://github.com/facebookresearch/fairseq-py/blob/master/fairseq/modules/grad_multiply.py
+##
+class GradMultiply(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, scale):
+        ctx.scale = scale
+        res = x.new(x)
+        ctx.mark_shared_storage((x, res))
+        return res
+
+    @staticmethod
+    def backward(ctx, grad):
+        return grad * ctx.scale, None
+
+
+class CNNEncoder(nn.Module):
+
+    def __init__(self, 
+            emb_size, 
+            vocab_sizes, 
+            vocab, 
+            kernels, 
+            decoder_attn_layers, 
+            dropout):
+        '''
+        emb_size: int, embedding size of n-grams
+        vocab_sizes: list of int, vocabulary size of n-grams
+        vocab: dict, (word, index) pairs
+        kernels: list of int, each entry indicates one layer of convolution
+        decoder_attn_layers: int, number of attention layers in decoder
+        dropout: float
+        '''
+        nn.Module.__init__(self)
+
+        self.kernels = kernels
+        self.dropout = dropout
+        self.attn_layers = decoder_attn_layers
+
+        self.embedding = N_Gram_Embedding(vocab, vocab_sizes, emb_size)
+        word_dim = emb_size * len(vocab_sizes)
+
+        self.convs = []
+        for k in kernels:
+            conv = nn.Conv1d(word_dim, word_dim * 2, k, padding=k//2)
+            std = math.sqrt(4. * (1 - dropout) / (k * word_dim))
+            conv.weight.data.normal_(0, std)
+            conv.bias.data.zero_()
+            self.convs.append(nn.utils.weight_norm(conv, dim=2))
+
+        self.convs = nn.ModuleList(self.convs)
+
+
+    def forward(self, x):
+        e = self.embedding(x).transpose(1,2)
+        x = e
+        n_layers = len(self.kernels)
+
+        for i in range(n_layers):
+            residual = x
+            x = F.dropout(x, self.dropout, self.training)
+
+            x = self.convs[i](x)
+            x = F.glu(x, 1)
+            x = GradMultiply.apply(x, 1.0 / (2.0 * self.attn_layers))
+            x = (x + residual) * math.sqrt(0.5)
+
+        return x, e
 
