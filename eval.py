@@ -51,17 +51,23 @@ def evaluate_rnn(encoder, decoder, dataloader, beam, max_len=150):
         decoder_input = Variable(torch.ones([batch_size, beam, 1]).long())
         prob_matrix = torch.zeros([batch_size, beam])
         dec_hs = torch.cat([dec_h.unsqueeze(0)] * beam)
-        for i in range(max_len):
-            if cuda:
-                decoder_input = decoder_input.cuda()
+        if cuda:
+            prob_matrix = prob_matrix.cuda()
+            dec_hs = dec_hs.cuda()
 
+        for i in range(max_len):
             tmp_prob = torch.zeros([batch_size, beam**2])
             indices = torch.zeros([batch_size, beam**2])
+            if cuda:
+                decoder_input = decoder_input.cuda()
+                tmp_prob = tmp_prob.cuda()
+                indices = indices.cuda()
+
             for b in range(beam):
                 decoder_out, dec_hs[b], _ = decoder(
                         decoder_input[:,b,:], dec_hs[b], encoder_out)
                 topv, topi = decoder_out.data.topk(beam)
-                tmp_prob[:,b*beam:(b+1)*beam] = prob_matrix + topv
+                tmp_prob[:,b*beam:(b+1)*beam] = (prob_matrix + topv)
                 indices[:,b*beam:(b+1)*beam] = topi
 
             prob_matrix, topi = tmp_prob.topk(beam)
@@ -123,13 +129,20 @@ def evaluate_cnn(encoder, decoder, dataloader, beam, max_len=150):
         candidate = torch.zeros([batch_size, beam, max_len]).long()
         candidate[:,:,0] = 1
         prob_matrix = torch.zeros([batch_size, beam])
-        for i in range(1, max_len):
-            decoder_input = Variable(candidate[:,:,:i])
-            if cuda:
-                decoder_input = decoder_input.cuda()
+        tmp_prob = torch.zeros([batch_size, beam**2])
+        indices = torch.zeros([batch_size, beam**2])
 
-            tmp_prob = torch.zeros([batch_size, beam**2])
-            indices = torch.zeros([batch_size, beam**2])
+        if cuda:
+            candidate = candidate.cuda()
+            prob_matrix = prob_matrix.cuda()
+            tmp_prob = tmp_prob.cuda()
+            indices = indices.cuda()
+
+        for i in range(1, max_len):
+            tmp_prob.zero_()
+            indices.zero_()
+            decoder_input = Variable(candidate[:,:,:i])
+
             for b in range(beam):
                 decoder_out = decoder(decoder_input[:,b,:], encoder_out)
                 topv, topi = decoder_out.data.topk(beam)
