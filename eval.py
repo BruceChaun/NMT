@@ -67,7 +67,7 @@ def evaluate_rnn(encoder, decoder, dataloader, beam, max_len=150):
                 decoder_out, dec_hs[b], _ = decoder(
                         decoder_input[:,b,:], dec_hs[b], encoder_out)
                 topv, topi = decoder_out.data.topk(beam)
-                tmp_prob[:,b*beam:(b+1)*beam] = (prob_matrix + topv)
+                tmp_prob[:,b*beam:(b+1)*beam] = prob_matrix + topv
                 indices[:,b*beam:(b+1)*beam] = topi
 
             prob_matrix, topi = tmp_prob.topk(beam)
