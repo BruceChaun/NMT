@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
+from torch.nn.utils import clip_grad_norm
 import numpy as np
 
 import random
@@ -65,6 +66,9 @@ def train(encoder, decoder, dataloader, conf):
         loss /= float(len(ref_len))
         loss.backward()
 
+        clip_grad_norm(encoder.parameters(), conf.grad_clip)
+        clip_grad_norm(decoder.parameters(), conf.grad_clip)
+
         enc_opt.step()
         dec_opt.step()
 
@@ -103,10 +107,11 @@ def main():
             num_workers=0)
     print('%d validation dataset loaded.' % len(dev_dataset))
 
-    save_name = conf.save_path+'/cnn'
-    if os.path.exists(save_name+'_encoder'):
-        encoder = torch.load(save_name+'_encoder')
-        decoder = torch.load(save_name+'_decoder')
+    save_name = conf.save_path+'/%scnn' % ('w' if conf.word_level else '')
+    start = 0
+    if os.path.exists(save_name+'_encoder_'+str(start-1)):
+        encoder = torch.load(save_name+'_encoder_'+str(start-1))
+        decoder = torch.load(save_name+'_decoder_'+str(start-1))
     else:
         encoder = CNNEncoder(
                 conf.encoder_emb_size, 
@@ -114,7 +119,8 @@ def main():
                 train_dataset.src_vocab, 
                 conf.encoder_kernels, 
                 len(conf.decoder_kernels), 
-                conf.encoder_dropout)
+                conf.encoder_dropout, 
+                conf.word_level)
         decoder = CNNDecoder(
                 conf.decoder_emb_size, 
                 len(train_dataset.ref_vocab), 
@@ -125,10 +131,8 @@ def main():
         encoder.cuda()
         decoder.cuda()
 
-    best_bleu = 0
-    best_encoder = copy.deepcopy(encoder.state_dict())
-    best_decoder = copy.deepcopy(decoder.state_dict())
-    for epoch in range(conf.epochs):
+    best_bleu = -1
+    for epoch in range(start, start + conf.epochs):
         print('Epoch [{:3d}]'.format(epoch))
         train_loss = train(encoder, decoder, train_dataloader, conf)
         print('Training loss:\t%f' % train_loss)
@@ -142,14 +146,15 @@ def main():
         print('Avg BLEU score:{:8.4f}'.format(bleus))
 
         if bleus > best_bleu:
-            best_bleu = bleus
-            best_encoder = copy.deepcopy(encoder.state_dict())
-            best_decoder = copy.deepcopy(decoder.state_dict())
+            #best_bleu = bleus
+            torch.save(encoder.cpu(), save_name+'_encoder_'+str(epoch))
+            torch.save(decoder.cpu(), save_name+'_decoder_'+str(epoch))
+            if conf.cuda:
+                encoder.cuda()
+                decoder.cuda()
 
-    encoder.load_state_dict(best_encoder)
-    decoder.load_state_dict(best_decoder)
-    torch.save(encoder.cpu(), save_name+'_encoder')
-    torch.save(decoder.cpu(), save_name+'_decoder')
+    #torch.save(encoder.cpu(), save_name+'_encoder')
+    #torch.save(decoder.cpu(), save_name+'_decoder')
 
 
 if __name__ == '__main__':

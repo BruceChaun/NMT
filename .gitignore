@@ -1,3 +1,6 @@
 data/*
 saver/*
 *.pyc
+*.s
+*.out
+*.txt

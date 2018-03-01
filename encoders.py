@@ -90,7 +90,8 @@ class RNNEncoder(nn.Module):
             vocab_sizes, 
             vocab, 
             n_layers, 
-            dropout):
+            dropout, 
+            word_level):
         '''
         emb_size: int, embedding size of n-grams
         hid_dim: int, size of rnn hidden layer
@@ -98,14 +99,25 @@ class RNNEncoder(nn.Module):
         vocab: dict, (word, index) pairs
         n_layers: int, number of rnn layers
         dropout: float, rnn dropout
+        word_level: bool, word embedding or char n-gram embedding
         '''
         nn.Module.__init__(self)
 
-        self.embedding = N_Gram_Embedding(vocab, vocab_sizes, emb_size)
+        if word_level:
+            self.embedding = nn.Embedding(len(vocab), emb_size, padding_idx=0)
+            self.embedding.weight.data.normal_(0, 0.1)
+            input_dim = emb_size
+        else:
+            self.embedding = N_Gram_Embedding(vocab, vocab_sizes, emb_size)
+            input_dim = emb_size * len(vocab_sizes)
+
         self.hid_dim = hid_dim
         self.n_layers = n_layers
-        self.gru = nn.GRU(emb_size*len(vocab_sizes), hid_dim, n_layers, 
+        self.gru = nn.GRU(input_dim, hid_dim, n_layers, 
                 batch_first=True, dropout=dropout, bidirectional=True)
+
+        for p in self.gru.parameters():
+            p.data.normal_(0, 0.01)
 
 
     def init_hidden(self, batch_size):
@@ -145,7 +157,8 @@ class CNNEncoder(nn.Module):
             vocab, 
             kernels, 
             decoder_attn_layers, 
-            dropout):
+            dropout, 
+            word_level):
         '''
         emb_size: int, embedding size of n-grams
         vocab_sizes: list of int, vocabulary size of n-grams
@@ -153,6 +166,7 @@ class CNNEncoder(nn.Module):
         kernels: list of int, each entry indicates one layer of convolution
         decoder_attn_layers: int, number of attention layers in decoder
         dropout: float
+        word_level: bool, word embedding or char n-gram embedding
         '''
         nn.Module.__init__(self)
 
@@ -160,13 +174,18 @@ class CNNEncoder(nn.Module):
         self.dropout = dropout
         self.attn_layers = decoder_attn_layers
 
-        self.embedding = N_Gram_Embedding(vocab, vocab_sizes, emb_size)
-        word_dim = emb_size * len(vocab_sizes)
+        if word_level:
+            self.embedding = nn.Embedding(len(vocab), emb_size, padding_idx=0)
+            self.embedding.weight.data.normal_(0, 0.1)
+            input_dim = emb_size
+        else:
+            self.embedding = N_Gram_Embedding(vocab, vocab_sizes, emb_size)
+            input_dim = emb_size * len(vocab_sizes)
 
         self.convs = []
         for k in kernels:
-            conv = nn.Conv1d(word_dim, word_dim * 2, k, padding=k//2)
-            std = math.sqrt(4. * (1 - dropout) / (k * word_dim))
+            conv = nn.Conv1d(input_dim, input_dim * 2, k, padding=k//2)
+            std = math.sqrt(4. * (1 - dropout) / (k * input_dim))
             conv.weight.data.normal_(0, std)
             conv.bias.data.zero_()
             self.convs.append(nn.utils.weight_norm(conv, dim=2))
@@ -185,8 +204,10 @@ class CNNEncoder(nn.Module):
 
             x = self.convs[i](x)
             x = F.glu(x, 1)
-            x = GradMultiply.apply(x, 1.0 / (2.0 * self.attn_layers))
             x = (x + residual) * math.sqrt(0.5)
+
+        x = GradMultiply.apply(x, 1.0 / (2.0 * self.attn_layers))
+        x = (x + e) * math.sqrt(0.5)
 
         return x, e
 

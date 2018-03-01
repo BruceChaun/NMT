@@ -198,8 +198,8 @@ if __name__ == '__main__':
     print('%d test dataset loaded.' % len(tst_dataset))
 
     save_name = os.path.join(conf.save_path, model_type)
-    encoder = torch.load(save_name+'_encoder')
-    decoder = torch.load(save_name+'_decoder')
+    encoder = torch.load(sys.argv[7])
+    decoder = torch.load(sys.argv[8])
     if conf.cuda:
         encoder.cuda()
         decoder.cuda()

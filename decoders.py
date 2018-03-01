@@ -15,8 +15,8 @@ class Dense(nn.Module):
                 [nn.Linear(layers[i], layers[i+1]) for i in range(len(layers)-1)]
                 )
 
-        for i in range(len(layers)-1):
-            self.fc[i].weight.data.normal_(0, math.sqrt(1. / layers[i]))
+        #for i in range(len(layers)-1):
+        #    self.fc[i].weight.data.normal_(0, math.sqrt(1. / layers[i]))
 
 
     def forward(self, x):
@@ -43,10 +43,19 @@ class RNNDecoder(nn.Module):
         nn.Module.__init__(self)
 
         self.embedding = nn.Embedding(vocab_size, emb_size, padding_idx=0)
+
         self.gru = nn.GRU(hid_dim * 2 + emb_size, hid_dim, n_layers, 
                 batch_first=True, dropout=dropout)
+
         self.attn = nn.Linear(hid_dim * 3, 1)
-        self.out = Dense([hid_dim * 3, vocab_size])
+        self.out = nn.Linear(hid_dim * 3, vocab_size)
+
+        # init weights
+        self.embedding.weight.data.normal_(0, 0.1)
+        for p in self.gru.parameters():
+            p.data.normal_(0, 0.01)
+        self.attn.weight.data.normal_(0, 0.01)
+        self.out.weight.data.normal_(0, 0.01)
 
 
     def forward(self, x, h, encoder_out):
@@ -101,7 +110,8 @@ class CNNDecoder(nn.Module):
         self.dropout = dropout
 
         self.embedding = nn.Embedding(vocab_size, emb_size, padding_idx=0)
-        self.out = Dense([emb_size, vocab_size])
+        self.embedding.weight.data.normal_(0, 0.1)
+        self.out = nn.Linear(emb_size, vocab_size)
 
         self.convs = []
         for k in kernels:
