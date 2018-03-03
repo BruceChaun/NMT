@@ -24,7 +24,7 @@ class Config(object):
         self.epochs = 100
         self.batch_size = 64
         self.beam = 1
-        self.word_level = False
+        self.word_level = True
         self.grad_clip = 1
         self.lr = 0.001
 
@@ -61,4 +61,11 @@ class AttnConfig(Config):
 
     def __init__(self, data_folder, src_lang, ref_lang):
         Config.__init__(self, data_folder, src_lang, ref_lang)
+
+        self.emb_size = 512
+        self.hid_dim = 2048
+        self.d_k = self.d_v = 64
+        self.num_head = 8
+        self.num_layers = 6
+        self.dropout = 0.1
 

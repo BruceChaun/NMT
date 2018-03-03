@@ -7,6 +7,8 @@ import torch.nn.functional as F
 import math
 import hashlib
 
+from modules import *
+
 
 class N_Gram_Embedding(nn.Module):
 
@@ -211,3 +213,65 @@ class CNNEncoder(nn.Module):
 
         return x, e
 
+
+class AttnEncoder(nn.Module):
+
+    def __init__(self, 
+            emb_size, 
+            hid_dim, 
+            d_k, 
+            d_v, 
+            num_head, 
+            vocab_sizes, 
+            vocab, 
+            num_attn_layers, 
+            dropout, 
+            word_level, 
+            src_len=200):
+        '''
+        emb_size: int, word embedding size, same as d_model in the paper
+        hid_dim: int, hidden dimension in position wise feed forward layer
+        d_k: int, dimension of query and key
+        d_v: int, dimension of value
+        num_head: int, number of heads in multi-head attention layer
+        vocab_sizes: list of ints, vocabulary sizes of n-grams
+        vocab: dict
+        num_attn_layers: int, number of attention layers
+        dropout: float, dropout rate in the network
+        word_level: bool, whether word is represented in word_level
+        src_len: int, max length of input sentence
+        '''
+        nn.Module.__init__(self)
+        self.num_attn_layers = num_attn_layers
+        self.dropout = dropout
+        self.pos_emb = position_embedding(src_len, emb_size)
+
+        if word_level:
+            self.embedding = nn.Embedding(len(vocab), emb_size, padding_idx=0)
+            input_dim = emb_size
+        else:
+            self.embedding = N_Gram_Embedding(vocab, vocab_sizes, emb_size)
+            input_dim = emb_size * len(vocab_sizes)
+
+        self.attn = nn.ModuleList([
+            MultiHeadAttn(num_head, emb_size, d_k, d_v, dropout)
+            for i in range(num_attn_layers)])
+        self.ff = nn.ModuleList([
+            PositionWiseFeedFoward(emb_size, hid_dim, dropout) 
+            for i in range(num_attn_layers)])
+
+
+    def forward(self, x):
+        '''
+        x: (batch_size, seq_len)
+        '''
+        batch_size, seq_len = x.size()
+        mask = get_padding_mask(x, x)
+        x = self.pos_emb[:seq_len] + self.embedding(x)
+        x = F.dropout(x, self.dropout, self.training)
+
+        for i in range(self.num_attn_layers):
+            x = self.attn[i](x, x, x, mask)
+            x = self.ff[i](x)
+
+        return x
