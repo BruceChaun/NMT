@@ -85,8 +85,8 @@ def main():
     ref_vocab = pickle.load(open(sys.argv[5], 'rb'))
 
     train_dataset = NMTDataset(
-            load_data(conf.train_src_path)[:100], 
-            load_data(conf.train_ref_path)[:100], 
+            load_data(conf.train_src_path), 
+            load_data(conf.train_ref_path), 
             src_vocab, 
             ref_vocab)
     train_dataloader = NMTDataLoader(
@@ -97,8 +97,8 @@ def main():
     print('%d training dataset loaded.' % len(train_dataset))
     
     dev_dataset = NMTDataset(
-            load_data(conf.dev_src_path)[:10], 
-            load_data(conf.dev_ref_path)[:10], 
+            load_data(conf.dev_src_path), 
+            load_data(conf.dev_ref_path), 
             src_vocab, 
             ref_vocab)
     dev_dataloader = NMTDataLoader(
