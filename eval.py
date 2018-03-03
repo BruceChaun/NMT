@@ -176,6 +176,54 @@ def evaluate_cnn(encoder, decoder, dataloader, beam, max_len=150):
         yield (src_seqs, ref_seqs, cand_seqs, bleus)
 
 
+def evaluate_attn(encoder, decoder, dataloader, beam, max_len=150):
+    cuda = torch.cuda.is_available()
+    encoder.eval()
+    decoder.eval()
+    src_vocab = {i:w for w,i in dataloader.dataset.src_vocab.items()}
+    ref_vocab = {i:w for w,i in dataloader.dataset.ref_vocab.items()}
+
+    for src, src_len, ref, ref_len in dataloader:
+        src = Variable(torch.LongTensor(src), volatile=True)
+        batch_size, src_max_len = src.size()
+
+        candidate = torch.zeros([batch_size, max_len]).long()
+        if cuda:
+            src = src.cuda()
+            candidate = candidate.cuda()
+
+        encoder_out = encoder(src)
+
+        # greedy search
+        candidate[:,0] = 1
+        for i in range(1, max_len):
+            decoder_input = Variable(candidate[:,:i])
+            decoder_out  = decoder(src, decoder_input, encoder_out)
+            _, topi = decoder_out.data.topk(1)
+            candidate[:,i:i+1] = topi
+
+        src_seqs = []
+        ref_seqs = []
+        cand_seqs = []
+        bleus = []
+        src = src.data.cpu().numpy()
+        candidate = candidate.cpu().numpy()
+        for i in range(batch_size):
+            src_seq = utils.convert2seq(src[i,1:], src_vocab)
+            ref_seq = utils.convert2seq(ref[i,1:], ref_vocab)
+            cand_seq = utils.convert2seq(candidate[i,1:], ref_vocab)
+            src_seqs.append(' '.join(src_seq))
+            ref_seqs.append(' '.join(ref_seq))
+            cand_seqs.append(' '.join(cand_seq))
+            if len(cand_seq) == 0:
+                bleus.append(0)
+            else:
+                bleus.append(100 * 
+                        bleu.compute_bleu([[ref_seq]], [cand_seq])[0])
+
+        yield (src_seqs, ref_seqs, cand_seqs, bleus)
+
+
 if __name__ == '__main__':
     data_folder = sys.argv[1]
     src_lang = sys.argv[2]

@@ -5,6 +5,8 @@ import torch.nn.functional as F
 
 import math
 
+from modules import *
+
 
 class Dense(nn.Module):
 
@@ -162,3 +164,67 @@ class CNNDecoder(nn.Module):
         out = F.log_softmax(self.out(x[:,:,-1]))
         return out
 
+
+class AttnDecoder(nn.Module):
+
+    def __init__(self, 
+            emb_size, 
+            hid_dim, 
+            d_k, 
+            d_v, 
+            num_head, 
+            vocab_size, 
+            num_attn_layers, 
+            dropout, 
+            tar_len=200):
+        '''
+        emb_size: int, word embedding size, same as d_model in the paper
+        hid_dim: int, hidden dimension in position wise feed forward layer
+        d_k: int, dimension of query and key
+        d_v: int, dimension of value
+        num_head: int, number of heads in multi-head attention layer
+        vocab_size: int, vocabulary size of target language sentence
+        num_attn_layers: int, number of attention layers
+        dropout: float, dropout rate in the network
+        tar_len: int, max length of translated sentence
+        '''
+        nn.Module.__init__(self)
+        self.num_attn_layers = num_attn_layers
+        self.dropout = dropout
+        self.pos_emb = position_embedding(tar_len, emb_size)
+
+        self.embedding = nn.Embedding(vocab_size, emb_size, padding_idx=0)
+        self.embedding.weight.data.normal_(0, 0.1)
+        self.out = nn.Linear(emb_size, vocab_size, False)
+        self.out.weight = self.embedding.weight
+
+        self.self_attn = nn.ModuleList([
+            MultiHeadAttn(num_head, emb_size, d_k, d_v, dropout)
+            for i in range(num_attn_layers)])
+        self.encoder_attn = nn.ModuleList([
+            MultiHeadAttn(num_head, emb_size, d_k, d_v, dropout)
+            for i in range(num_attn_layers)])
+        self.ff = nn.ModuleList([
+             PositionWiseFeedFoward(emb_size, hid_dim, dropout)
+             for i in range(num_attn_layers)])
+
+
+    def forward(self, src_seq, decoder_input, encoder_out):
+        '''
+        src_seq: (batch_size, seq_len)
+        decoder_input: (batch_size, seq_len)
+        encoder_out: (batch_size, seq_len, feature_dim)
+        '''
+        batch_size, dec_len = decoder_input.size()
+        dec_self_attn_mask = get_padding_mask(decoder_input, decoder_input)
+        enc_dec_attn_mask = get_padding_mask(decoder_input, src_seq)
+
+        x = self.embedding(decoder_input) + self.pos_emb[:dec_len]
+        for i in range(self.num_attn_layers):
+            x = self.self_attn[i](x, x, x, dec_self_attn_mask)
+            x = self.encoder_attn[i](
+                    x.transpose(1,2), encoder_out, encoder_out, enc_dec_attn_mask)
+            x = self.ff[i](x)
+
+        x = self.out(x[:,-1,:])
+        return x
