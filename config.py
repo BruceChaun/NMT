@@ -1,5 +1,6 @@
 import os
 import torch
+import math
 
 
 class Config(object):
@@ -13,7 +14,7 @@ class Config(object):
         self.dev_ref_path = os.path.join(data_folder, ref_lang+'.dev')
         self.tst_ref_path = os.path.join(data_folder, ref_lang+'.tst')
 
-        self.save_path = 'saver'
+        self.save_path = 'ckpt'
         if not os.path.exists(self.save_path):
             os.mkdir(self.save_path)
 
@@ -22,11 +23,11 @@ class Config(object):
         self.vocab_sizes = [53, 499, 997, 2003]
         self.teaching_ratio = 0.5
         self.epochs = 100
-        self.batch_size = 64
+        self.batch_size = 32
         self.beam = 1
         self.word_level = True
         self.grad_clip = 1
-        self.lr = 0.001
+        self.lr = 0.01
 
 
 class RNNConfig(Config):
@@ -54,18 +55,27 @@ class CNNConfig(Config):
         self.decoder_kernels = [5] * 5
         self.encoder_dropout = 0.1
         self.decoder_dropout = 0.1
-        self.batch_size = 8
+        self.lr = 0.001
 
 
-class AttnConfig(Config):
+class ATTNConfig(Config):
 
     def __init__(self, data_folder, src_lang, ref_lang):
         Config.__init__(self, data_folder, src_lang, ref_lang)
 
-        self.emb_size = 512
-        self.hid_dim = 2048
+        self.emb_size = 512 # a.k.a. d_model
+        self.hid_dim = 1024
         self.d_k = self.d_v = 64
         self.num_head = 8
         self.num_layers = 6
         self.dropout = 0.1
+        self.warmup_steps = 4000
+        self.lr = 0.00001
+        self.grad_clip = 10
+
+
+    def lr_schedule(self, epoch):
+        self.lr = math.sqrt(1./self.emb_size) * \
+                min(math.sqrt(1./epoch), 
+                        epoch * math.pow(self.warmup_steps, -1.5))
 

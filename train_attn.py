@@ -11,7 +11,7 @@ import os
 import pickle
 import copy
 
-from config import AttnConfig
+from config import ATTNConfig
 from dataset import *
 from encoders import AttnEncoder
 from decoders import AttnDecoder
@@ -22,8 +22,10 @@ import utils
 def train(encoder, decoder, dataloader, conf):
     encoder.train()
     decoder.train()
-    enc_opt = optim.Adam(encoder.parameters(), lr=conf.lr)
-    dec_opt = optim.Adam(decoder.parameters(), lr=conf.lr)
+    enc_opt = optim.Adam(encoder.parameters(), 
+            lr=conf.lr, betas=(0.9, 0.98), eps=1e-9)
+    dec_opt = optim.Adam(decoder.parameters(), 
+            lr=conf.lr, betas=(0.9, 0.98), eps=1e-9)
     loss_fn = nn.CrossEntropyLoss()
 
     total_loss = 0
@@ -72,6 +74,9 @@ def train(encoder, decoder, dataloader, conf):
         enc_opt.step()
         dec_opt.step()
 
+        del src, ref, decoder_input, loss
+        torch.cuda.empty_cache()
+
     return total_loss / len(dataloader.dataset)
 
 
@@ -79,7 +84,7 @@ def main():
     data_folder = sys.argv[1]
     src_lang = sys.argv[2]
     ref_lang = sys.argv[3]
-    conf = AttnConfig(data_folder, src_lang, ref_lang)
+    conf = ATTNConfig(data_folder, src_lang, ref_lang)
 
     src_vocab = pickle.load(open(sys.argv[4], 'rb'))
     ref_vocab = pickle.load(open(sys.argv[5], 'rb'))

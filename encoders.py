@@ -210,6 +210,7 @@ class CNNEncoder(nn.Module):
 
         x = GradMultiply.apply(x, 1.0 / (2.0 * self.attn_layers))
         x = (x + e) * math.sqrt(0.5)
+        del residual
 
         return x, e
 
@@ -248,6 +249,7 @@ class AttnEncoder(nn.Module):
 
         if word_level:
             self.embedding = nn.Embedding(len(vocab), emb_size, padding_idx=0)
+            self.embedding.weight.data.normal_(0, 0.1)
             input_dim = emb_size
         else:
             self.embedding = N_Gram_Embedding(vocab, vocab_sizes, emb_size)

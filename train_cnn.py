@@ -27,6 +27,7 @@ def train(encoder, decoder, dataloader, conf):
     loss_fn = nn.NLLLoss()
 
     total_loss = 0
+    n_batch = 0
     for src, src_len, ref, ref_len in dataloader:
         enc_opt.zero_grad()
         dec_opt.zero_grad()
@@ -63,6 +64,7 @@ def train(encoder, decoder, dataloader, conf):
                 decoder_input = torch.cat([decoder_input, Variable(topi)], dim=1)
 
         total_loss += np.asscalar(loss.data.cpu().numpy())
+        n_batch += 1
         loss /= float(len(ref_len))
         loss.backward()
 
@@ -71,6 +73,14 @@ def train(encoder, decoder, dataloader, conf):
 
         enc_opt.step()
         dec_opt.step()
+
+        # release gpu memory, version 0.3+ only
+        del src, e, ref, decoder_input, loss
+        torch.cuda.empty_cache()
+
+        if n_batch % 100 == 0:
+            print('minibatch #{:4d}, average loss: {:4.4f}'.format(
+                n_batch, total_loss / n_batch / batch_size))
 
     return total_loss / len(dataloader.dataset)
 

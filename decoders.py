@@ -150,7 +150,7 @@ class CNNDecoder(nn.Module):
             x = x.transpose(1, 2)
             attn = x.bmm(encoder_out)
             sz = attn.size()
-            attn = F.softmax(attn.view(sz[0] * sz[1], sz[2]))
+            attn = F.softmax(attn.view(sz[0] * sz[1], sz[2]), dim=1)
             attn = attn.view(sz).transpose(1,2)
 
             # Eq. 3, conditional input
@@ -161,7 +161,9 @@ class CNNDecoder(nn.Module):
             x = (x + residual_attn) * math.sqrt(0.5)
             x = (x + residual) * math.sqrt(0.5)
 
-        out = F.log_softmax(self.out(x[:,:,-1]))
+        del target, residual, residual_attn, attn
+
+        out = F.log_softmax(self.out(x[:,:,-1]), dim=1)
         return out
 
 

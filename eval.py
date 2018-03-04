@@ -24,6 +24,7 @@ def evaluate_rnn(encoder, decoder, dataloader, beam, max_len=150):
         decoder_input = src[:,:1]
         src = src[:,1:] # skip <SOS>
         batch_size, src_max_len = src.size()
+        max_len = min(max_len, src_max_len * 2)
         enc_h = encoder.init_hidden(batch_size)
 
         if cuda:
@@ -108,6 +109,7 @@ def evaluate_cnn(encoder, decoder, dataloader, beam, max_len=150):
     for src, src_len, ref, ref_len in dataloader:
         src = Variable(torch.LongTensor(src), volatile=True)
         batch_size, src_max_len = src.size()
+        max_len = min(max_len, src_max_len * 2)
 
         if cuda:
             src = src.cuda()
@@ -173,6 +175,9 @@ def evaluate_cnn(encoder, decoder, dataloader, beam, max_len=150):
                 bleus.append(100 * 
                         bleu.compute_bleu([[ref_seq]], [cand_seq])[0])
 
+        del src, candidate, prob_matrix, tmp_prob, indices
+        torch.cuda.empty_cache()
+
         yield (src_seqs, ref_seqs, cand_seqs, bleus)
 
 
@@ -186,21 +191,20 @@ def evaluate_attn(encoder, decoder, dataloader, beam, max_len=150):
     for src, src_len, ref, ref_len in dataloader:
         src = Variable(torch.LongTensor(src), volatile=True)
         batch_size, src_max_len = src.size()
+        max_len = min(max_len, src_max_len * 2)
 
-        candidate = torch.zeros([batch_size, max_len]).long()
+        candidate = torch.ones([batch_size, max_len]).long()
         if cuda:
             src = src.cuda()
             candidate = candidate.cuda()
 
         encoder_out = encoder(src)
+        decoder_input = src[:,:1]
 
         # greedy search
-        candidate[:,0] = 1
         for i in range(1, max_len):
-            decoder_input = Variable(candidate[:,:i])
-            decoder_out  = decoder(src, decoder_input, encoder_out)
-            _, topi = decoder_out.data.topk(1)
-            candidate[:,i:i+1] = topi
+            decoder_out  = decoder(src, Variable(candidate[:,:i]), encoder_out)
+            candidate[:,i:i+1] = decoder_out.data.topk(1)[1]
 
         src_seqs = []
         ref_seqs = []
@@ -245,7 +249,6 @@ if __name__ == '__main__':
             num_workers=0)
     print('%d test dataset loaded.' % len(tst_dataset))
 
-    save_name = os.path.join(conf.save_path, model_type)
     encoder = torch.load(sys.argv[7])
     decoder = torch.load(sys.argv[8])
     if conf.cuda:
