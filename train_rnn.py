@@ -80,6 +80,10 @@ def train(encoder, decoder, dataloader, conf):
         enc_opt.step()
         dec_opt.step()
 
+        if batches % 100 == 0:
+            print('minibatch #{:4d}, average loss: {:4.4f}'.format(
+                batches, total_loss / batches / batch_size))
+
     return total_loss / len(dataloader.dataset)
 
 

@@ -75,7 +75,7 @@ def train(encoder, decoder, dataloader, conf):
         dec_opt.step()
 
         # release gpu memory, version 0.3+ only
-        del src, e, ref, decoder_input, loss
+        del src, encoder_out, e, ref, decoder_input, loss
         torch.cuda.empty_cache()
 
         if n_batch % 100 == 0:
