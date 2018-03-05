@@ -52,6 +52,7 @@ def train(encoder, decoder, dataloader, conf):
         mask = torch.Tensor(utils.mask_matrix(ref_len, ref_max_len))
         teacher_forcing = random.random() < conf.teaching_ratio
 
+        # forward
         try:
             encoder_out = encoder(src)
 
@@ -76,6 +77,7 @@ def train(encoder, decoder, dataloader, conf):
             else:
                 raise e
 
+        # backward
         try:
             loss /= float(len(ref_len))
             loss.backward()
