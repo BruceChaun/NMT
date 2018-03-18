@@ -256,10 +256,10 @@ class AttnEncoder(nn.Module):
             input_dim = emb_size * len(vocab_sizes)
 
         self.attn = nn.ModuleList([
-            MultiHeadAttn(num_head, emb_size, d_k, d_v, dropout)
+            MultiHeadAttn(num_head, input_dim, d_k, d_v, dropout)
             for i in range(num_attn_layers)])
         self.ff = nn.ModuleList([
-            PositionWiseFeedFoward(emb_size, hid_dim, dropout) 
+            PositionWiseFeedFoward(input_dim, hid_dim, dropout) 
             for i in range(num_attn_layers)])
 
 
