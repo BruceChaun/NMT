@@ -47,14 +47,13 @@ class ScaledDotProductAttn(nn.Module):
         Q, K, V have the dimension of (batch_size, seq_len, dim)
         mask: (batch_size, seq_len, seq_len), mask out illegal positions
         '''
-        attn = torch.bmm(Q, K.transpose(1,2).contiguous()) * self.scale
+        attn = torch.bmm(Q, K.transpose(1,2)) * self.scale
         if mask is not None:
             assert attn.size() == mask.size()
             attn.data.masked_fill_(mask, -float('inf'))
 
         attn = F.softmax(attn, dim=2)
-        attn = attn.bmm(V)
-        return attn
+        return torch.bmm(attn, V)
 
 
 class MultiHeadAttn(nn.Module):
@@ -78,12 +77,9 @@ class MultiHeadAttn(nn.Module):
         self.d_v = d_v
         self.dropout = dropout
 
-        self.Wq = nn.ModuleList(
-                [nn.Linear(d_model, d_k) for n in range(num_head)])
-        self.Wk = nn.ModuleList(
-                [nn.Linear(d_model, d_k) for n in range(num_head)])
-        self.Wv = nn.ModuleList(
-                [nn.Linear(d_model, d_v) for n in range(num_head)])
+        self.Wq = nn.Parameter(torch.FloatTensor(num_head, d_model, d_k))
+        self.Wk = nn.Parameter(torch.FloatTensor(num_head, d_model, d_k))
+        self.Wv = nn.Parameter(torch.FloatTensor(num_head, d_model, d_v))
         self.Wo = nn.Linear(d_v * num_head, d_model)
 
         self.attn = ScaledDotProductAttn(d_model)
@@ -93,40 +89,41 @@ class MultiHeadAttn(nn.Module):
 
 
     def __init_weights(self):
-        for w in self.Wq:
-            init.xavier_normal(w.weight)
-
-        for w in self.Wk:
-           init.xavier_normal(w.weight)
-           
-        for w in self.Wv:
-            init.xavier_normal(w.weight)
-
+        init.xavier_normal(self.Wq)
+        init.xavier_normal(self.Wk)
+        init.xavier_normal(self.Wv)
         init.xavier_normal(self.Wo.weight)
 
 
-    def forward(self, Q, K, V, mask=None):
+    def forward(self, Q, K , V, mask=None):
         '''
         Q, K, V: (batch_size, seq_len, dim)
         mask: (batch_size, seq_len, seq_len), mask out illegal positions
-        
-        NOTE: return a tensor with shape (batch_size, dim, seq_len)
         '''
         residual = Q
 
-        out = []
-        for i in range(self.num_head):
-            out.append(self.attn(
-                self.Wq[i](Q), self.Wk[i](K), self.Wv[i](V), mask)
-                )
-        out = torch.cat(out, dim=2)
+        B, q_len, d = Q.size()
+        k_len = K.size(1)
+        v_len = V.size(1)
+
+        Q = Q.repeat(self.num_head, 1, 1).view(self.num_head, -1, d)
+        K = K.repeat(self.num_head, 1, 1).view(self.num_head, -1, d)
+        V = V.repeat(self.num_head, 1, 1).view(self.num_head, -1, d)
+
+        Q = Q.bmm(self.Wq).view(-1, q_len, self.d_k)
+        K = K.bmm(self.Wk).view(-1, k_len, self.d_k)
+        V = V.bmm(self.Wv).view(-1, v_len, self.d_v)
+
+        out = self.attn(Q, K, V, 
+                None if mask is None else mask.repeat(self.num_head, 1, 1))
+        out = torch.cat(torch.split(out, B, dim=0), dim=-1)
 
         out = self.Wo(out)
         out = F.dropout(out, self.dropout, self.training)
         out += residual
-        out = self.bn(out.transpose(1,2).contiguous())
 
-        return out
+        out = self.bn(out.transpose(1,2).contiguous())
+        return out.transpose(1,2).contiguous()
 
 
 class PositionWiseFeedFoward(nn.Module):
@@ -140,22 +137,22 @@ class PositionWiseFeedFoward(nn.Module):
         nn.Module.__init__(self)
 
         self.dropout = dropout
-        self.fc1 = nn.Conv1d(input_dim, hid_dim, 1)
-        self.fc2 = nn.Conv1d(hid_dim, input_dim, 1)
+        self.fc1 = nn.Linear(input_dim, hid_dim)#nn.Conv1d(input_dim, hid_dim, 1)
+        self.fc2 = nn.Linear(hid_dim, input_dim)#nn.Conv1d(hid_dim, input_dim, 1)
         self.bn = nn.BatchNorm1d(input_dim)
         self.relu = nn.ReLU()
 
 
     def forward(self, x):
         '''
-        x: (batch_size, dim, seq_len)
-
-        NOTE: return a tensor with shape (batch_size, seq_len, dim)
+        x: (batch_size, seq_len, dim)
         '''
         residual = x
         x = self.relu(self.fc1(x))
         x = self.fc2(x)
         x = F.dropout(x, self.dropout, self.training)
-        x = self.bn(x + residual).transpose(1,2).contiguous()
+        x += residual
+        x = self.bn(x.transpose(1,2).contiguous())
+        x = x.transpose(1,2).contiguous()
         return x
 

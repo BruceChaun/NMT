@@ -225,8 +225,9 @@ class AttnDecoder(nn.Module):
         for i in range(self.num_attn_layers):
             x = self.self_attn[i](x, x, x, dec_self_attn_mask)
             x = self.encoder_attn[i](
-                    x.transpose(1,2), encoder_out, encoder_out, enc_dec_attn_mask)
+                    x, encoder_out, encoder_out, enc_dec_attn_mask)
             x = self.ff[i](x)
 
         x = self.out(x[:,-1,:])
+        x = F.log_softmax(x, dim=1)
         return x

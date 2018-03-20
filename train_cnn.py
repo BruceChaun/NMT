@@ -28,61 +28,69 @@ def train(encoder, decoder, dataloader, conf):
 
     total_loss = 0
     n_batch = 0
+    ooms = 0
     for src, src_len, ref, ref_len in dataloader:
-        enc_opt.zero_grad()
-        dec_opt.zero_grad()
-        loss = 0
-
-        batch_size, src_max_len = src.shape
-        src = Variable(torch.LongTensor(src))
-        ref = Variable(torch.LongTensor(ref))
-
-        ref_max_len = ref.size(1)
-
-        if conf.cuda:
-            src = src.cuda()
-            ref = ref.cuda()
-
-        encoder_out, e = encoder(src)
-
-        decoder_input = ref[:,:1]
-        mask = torch.Tensor(utils.mask_matrix(ref_len, ref_max_len))
-        teacher_forcing = random.random() < conf.teaching_ratio
-
-        if teacher_forcing:
-            for i in range(1, ref_max_len):
-                decoder_out = decoder(decoder_input, encoder_out)
-                loss += utils.batch_loss(loss_fn, decoder_out, ref[:,i], mask[:,i])
-                decoder_input = ref[:,:i+1]
-
-        else:
-            for i in range(1, ref_max_len):
-                decoder_out = decoder(decoder_input, encoder_out)
-                loss += utils.batch_loss(loss_fn, decoder_out, ref[:,i], mask[:,i])
-
-                _, topi = decoder_out.data.topk(1)
-                decoder_input = torch.cat([decoder_input, Variable(topi)], dim=1)
-
-        total_loss += np.asscalar(loss.data.cpu().numpy())
         n_batch += 1
-        loss /= float(len(ref_len))
-        loss.backward()
+        try:
+            enc_opt.zero_grad()
+            dec_opt.zero_grad()
+            loss = 0
 
-        clip_grad_norm(encoder.parameters(), conf.grad_clip)
-        clip_grad_norm(decoder.parameters(), conf.grad_clip)
+            batch_size, src_max_len = src.shape
+            src = Variable(torch.LongTensor(src))
+            ref = Variable(torch.LongTensor(ref))
 
-        enc_opt.step()
-        dec_opt.step()
+            ref_max_len = ref.size(1)
 
-        # release gpu memory, version 0.3+ only
-        del src, encoder_out, e, ref, decoder_input, loss
-        torch.cuda.empty_cache()
+            if conf.cuda:
+                src = src.cuda()
+                ref = ref.cuda()
 
-        if n_batch % 100 == 0:
-            print('minibatch #{:4d}, average loss: {:4.4f}'.format(
-                n_batch, total_loss / n_batch / batch_size))
+            encoder_out, e = encoder(src)
 
-    return total_loss / len(dataloader.dataset)
+            decoder_input = ref[:,:1]
+            mask = torch.Tensor(utils.mask_matrix(ref_len, ref_max_len))
+            teacher_forcing = random.random() < conf.teaching_ratio
+
+            if teacher_forcing:
+                for i in range(1, ref_max_len):
+                    decoder_out = decoder(decoder_input, encoder_out)
+                    loss += utils.batch_loss(loss_fn, decoder_out, ref[:,i], mask[:,i])
+                    decoder_input = ref[:,:i+1]
+
+            else:
+                for i in range(1, ref_max_len):
+                    decoder_out = decoder(decoder_input, encoder_out)
+                    loss += utils.batch_loss(loss_fn, decoder_out, ref[:,i], mask[:,i])
+
+                    _, topi = decoder_out.data.topk(1)
+                    decoder_input = torch.cat([decoder_input, Variable(topi)], dim=1)
+
+            _loss = np.asscalar(loss.data.cpu().numpy())
+            loss /= float(len(ref_len))
+            loss.backward()
+
+            clip_grad_norm(encoder.parameters(), conf.grad_clip)
+            clip_grad_norm(decoder.parameters(), conf.grad_clip)
+
+            enc_opt.step()
+            dec_opt.step()
+
+            total_loss += _loss
+            if n_batch % 100 == 0:
+                print('minibatch #{:4d}, average loss: {:4.4f}'.format(
+                    n_batch, total_loss / (n_batch - ooms) / batch_size))
+
+        except RuntimeError as e:
+            if 'out of memory' in str(e):
+                ooms += 1
+                torch.cuda.empty_cache()
+            else:
+                raise e
+
+    if ooms > 0:
+        print('Hit [%d] times out of memory error' % ooms)
+    return total_loss / (len(dataloader.dataset) - ooms * conf.batch_size)
 
 
 def main():
@@ -115,6 +123,7 @@ def main():
             dev_dataset, 
             batch_size=conf.batch_size, 
             num_workers=0)
+    #dev_dataloader = train_dataloader
     print('%d validation dataset loaded.' % len(dev_dataset))
 
     save_name = conf.save_path+'/%scnn' % ('w' if conf.word_level else '')
