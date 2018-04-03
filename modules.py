@@ -114,16 +114,24 @@ class MultiHeadAttn(nn.Module):
         K = K.bmm(self.Wk).view(-1, k_len, self.d_k)
         V = V.bmm(self.Wv).view(-1, v_len, self.d_v)
 
-        out = self.attn(Q, K, V, 
-                None if mask is None else mask.repeat(self.num_head, 1, 1))
+        if mask is not None:
+            sz = mask.size()
+            mask = mask.unsqueeze(0).repeat(self.num_head,1,1,1)
+            mask = mask.transpose(0,1).contiguous()
+            mask = mask.view(-1,sz[1],sz[2])
+
+        out = self.attn(Q, K, V, mask)
         out = torch.cat(torch.split(out, B, dim=0), dim=-1)
 
         out = self.Wo(out)
         out = F.dropout(out, self.dropout, self.training)
         out += residual
 
-        out = self.bn(out.transpose(1,2).contiguous())
-        return out.transpose(1,2).contiguous()
+        if B > 1:
+            out = self.bn(out.transpose(1,2).contiguous())
+            out = out.transpose(1,2).contiguous()
+        
+        return out
 
 
 class PositionWiseFeedFoward(nn.Module):
@@ -152,7 +160,10 @@ class PositionWiseFeedFoward(nn.Module):
         x = self.fc2(x)
         x = F.dropout(x, self.dropout, self.training)
         x += residual
-        x = self.bn(x.transpose(1,2).contiguous())
-        x = x.transpose(1,2).contiguous()
+        
+        if x.size(0)  >  1:
+            x = self.bn(x.transpose(1,2).contiguous())
+            x = x.transpose(1,2).contiguous()
+
         return x
 

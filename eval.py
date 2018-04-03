@@ -12,7 +12,7 @@ import utils
 import config
 
 
-def evaluate_rnn(encoder, decoder, dataloader, beam, max_len=150):
+def evaluate_rnn(encoder, decoder, dataloader, beam, max_len=75):
     cuda = torch.cuda.is_available()
     encoder.eval()
     decoder.eval()
@@ -99,7 +99,7 @@ def evaluate_rnn(encoder, decoder, dataloader, beam, max_len=150):
         yield (src_seqs, ref_seqs, cand_seqs, bleus)
 
 
-def evaluate_cnn(encoder, decoder, dataloader, beam, max_len=150):
+def evaluate_cnn(encoder, decoder, dataloader, beam, max_len=75):
     cuda = torch.cuda.is_available()
     encoder.eval()
     decoder.eval()
@@ -181,7 +181,7 @@ def evaluate_cnn(encoder, decoder, dataloader, beam, max_len=150):
         yield (src_seqs, ref_seqs, cand_seqs, bleus)
 
 
-def evaluate_attn(encoder, decoder, dataloader, beam, max_len=150):
+def evaluate_attn(encoder, decoder, dataloader, beam, max_len=75):
     cuda = torch.cuda.is_available()
     encoder.eval()
     decoder.eval()
@@ -239,8 +239,8 @@ if __name__ == '__main__':
     ref_vocab = pickle.load(open(sys.argv[6], 'rb'))
 
     tst_dataset = NMTDataset(
-            load_data(conf.tst_src_path), 
-            load_data(conf.tst_ref_path), 
+            load_data(conf.dev_src_path), 
+            load_data(conf.dev_ref_path), 
             src_vocab, 
             ref_vocab)
     tst_dataloader = NMTDataLoader(
