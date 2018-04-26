@@ -28,3 +28,7 @@ def convert2seq(idx_seq, ivocab):
         seq.append(ivocab[idx])
 
     return seq
+
+
+def model_size(model):
+    return sum([p.data.nelement() for p in model.parameters()])
