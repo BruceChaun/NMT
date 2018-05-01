@@ -25,10 +25,8 @@ This is a PyTorch implementation of neural machine translation.
 
 2. Preprocess data
 ```bash
-python preprocess.py data/en-de/train.tags.en-de.de \
-    data/en-de/train.tags.en-de.en \
-    data/en-de/de.train 
-    data/en-de/en.train # parse raw data
+python preprocess.py data/en-de/train.tags.en-de.de data/en-de/train.tags.en-de.en \
+    data/en-de/de.train data/en-de/en.train # parse raw data
 python preprocess.py data/en-de/de.train data/en-de/de.vocab.p 3 # build source vocab
 python preprocess.py data/en-de/en.train data/en-de/en.vocab.p 3 # build target vocab
 ```
@@ -60,11 +58,11 @@ python eval.py data/en-de de en [rnn|cnn|attn] \
 | Model | beam=1 | beam=3 | beam=5 |
 |:-----:|:------:|:------:|:------:|
 | RNN(word) | 7.3 | 8.6 | 8.8 |
-| RNN(n-gram) | 3.7 | 4.2 | 4.5 |
+| RNN(n-gram) | 4.0 | 4.6 | 4.8 |
 | ConvS2S(word) | 14.2 | 17.2 | 17.8 |
 | ConvS2S(n-gram) | 11.0 | 13.7 | 14.4 |
-| Transformer(word) | 3.7 | 4.1 | 4.2 |
-| Transformer(n-gram) | 4.0 | 4.2 | 4.3 |
+| Transformer(word) | 4.0 | 4.1 | 4.2 |
+| Transformer(n-gram) | 4.1 | 4.3 | 4.2 |
 
 ### Inference Speed
 
