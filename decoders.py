@@ -17,9 +17,6 @@ class Dense(nn.Module):
                 [nn.Linear(layers[i], layers[i+1]) for i in range(len(layers)-1)]
                 )
 
-        #for i in range(len(layers)-1):
-        #    self.fc[i].weight.data.normal_(0, math.sqrt(1. / layers[i]))
-
 
     def forward(self, x):
         for fc in self.fc:

@@ -53,7 +53,9 @@ class ScaledDotProductAttn(nn.Module):
             attn.data.masked_fill_(mask, -float('inf'))
 
         attn = F.softmax(attn, dim=2)
-        return torch.bmm(attn, V)
+        attn = torch.bmm(attn, V)
+
+        return attn
 
 
 class MultiHeadAttn(nn.Module):
@@ -115,10 +117,7 @@ class MultiHeadAttn(nn.Module):
         V = V.bmm(self.Wv).view(-1, v_len, self.d_v)
 
         if mask is not None:
-            sz = mask.size()
-            mask = mask.unsqueeze(0).repeat(self.num_head,1,1,1)
-            mask = mask.transpose(0,1).contiguous()
-            mask = mask.view(-1,sz[1],sz[2])
+            mask = mask.repeat(self.num_head,1,1)
 
         out = self.attn(Q, K, V, mask)
         out = torch.cat(torch.split(out, B, dim=0), dim=-1)
@@ -145,8 +144,8 @@ class PositionWiseFeedFoward(nn.Module):
         nn.Module.__init__(self)
 
         self.dropout = dropout
-        self.fc1 = nn.Linear(input_dim, hid_dim)#nn.Conv1d(input_dim, hid_dim, 1)
-        self.fc2 = nn.Linear(hid_dim, input_dim)#nn.Conv1d(hid_dim, input_dim, 1)
+        self.fc1 = nn.Linear(input_dim, hid_dim)
+        self.fc2 = nn.Linear(hid_dim, input_dim)
         self.bn = nn.BatchNorm1d(input_dim)
         self.relu = nn.ReLU()
 
@@ -160,8 +159,8 @@ class PositionWiseFeedFoward(nn.Module):
         x = self.fc2(x)
         x = F.dropout(x, self.dropout, self.training)
         x += residual
-        
-        if x.size(0)  >  1:
+
+        if x.size(0) > 1:
             x = self.bn(x.transpose(1,2).contiguous())
             x = x.transpose(1,2).contiguous()
 

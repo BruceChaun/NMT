@@ -192,20 +192,10 @@ def evaluate_attn(encoder, decoder, dataloader, beam, max_len=75):
         batch_size, src_max_len = src.size()
         max_len = min(max_len, src_max_len * 2)
 
-        #candidate = torch.ones([batch_size, max_len]).long()
         if cuda:
             src = src.cuda()
-            #candidate = candidate.cuda()
 
         encoder_out = encoder(src)
-        #decoder_input = src[:,:1]
-
-        '''
-        # greedy search
-        for i in range(1, max_len):
-            decoder_out  = decoder(src, Variable(candidate[:,:i]), encoder_out)
-            candidate[:,i:i+1] = decoder_out.data.topk(1)[1]
-        '''
 
         # beam search
         candidate = torch.zeros([batch_size, beam, max_len]).long()
@@ -318,7 +308,7 @@ if __name__ == '__main__':
 
     end_time = time.time()
     duration = end_time - start_time
-    print('Avg BLEU score:{:8.4f}'.format(bleus/len(tst_dataloader.dataset)))
+    print('Avg BLEU score:{:8.4f}'.format(bleus/len(tst_dataset)))
     print('Total time elapsed -- {:4.2f}, speed -- {:2.2f}'.format(
         duration, duration / len(tst_dataset)))
 

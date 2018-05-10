@@ -245,7 +245,6 @@ class AttnEncoder(nn.Module):
         nn.Module.__init__(self)
         self.num_attn_layers = num_attn_layers
         self.dropout = dropout
-        self.pos_emb = position_embedding(src_len, emb_size)
 
         if word_level:
             self.embedding = nn.Embedding(len(vocab), emb_size, padding_idx=0)
@@ -254,6 +253,7 @@ class AttnEncoder(nn.Module):
         else:
             self.embedding = N_Gram_Embedding(vocab, vocab_sizes, emb_size)
             input_dim = emb_size * len(vocab_sizes)
+        self.pos_emb = position_embedding(src_len, input_dim)
 
         self.attn = nn.ModuleList([
             MultiHeadAttn(num_head, input_dim, d_k, d_v, dropout)

@@ -77,7 +77,7 @@ def train(encoder, decoder, dataloader, conf):
             dec_opt.step()
 
             total_loss += _loss
-            if n_batch % 100 == 0:
+            if n_batch % 1000 == 0:
                 print('minibatch #{:4d}, average loss: {:4.4f}'.format(
                     n_batch, total_loss / (n_batch - ooms) / batch_size))
 
@@ -123,7 +123,6 @@ def main():
             dev_dataset, 
             batch_size=conf.batch_size, 
             num_workers=0)
-    #dev_dataloader = train_dataloader
     print('%d validation dataset loaded.' % len(dev_dataset))
 
     save_name = conf.save_path+'/%scnn' % ('w' if conf.word_level else '')
@@ -171,9 +170,6 @@ def main():
             if conf.cuda:
                 encoder.cuda()
                 decoder.cuda()
-
-    #torch.save(encoder.cpu(), save_name+'_encoder')
-    #torch.save(decoder.cpu(), save_name+'_decoder')
 
 
 if __name__ == '__main__':

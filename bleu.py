@@ -111,7 +111,3 @@ def compute_bleu(reference_corpus, translation_corpus, max_order=4,
 
   return (bleu, precisions, bp, ratio, translation_length, reference_length)
 
-"""
-Credit
-  https://github.com/tensorflow/nmt/blob/master/nmt/scripts/bleu.py
-"""

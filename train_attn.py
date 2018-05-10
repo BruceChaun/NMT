@@ -26,7 +26,6 @@ def train(encoder, decoder, dataloader, conf):
             lr=conf.lr, betas=(0.9, 0.98), eps=1e-9)
     dec_opt = optim.Adam(decoder.parameters(), 
             lr=conf.lr, betas=(0.9, 0.98), eps=1e-9)
-    #loss_fn = nn.CrossEntropyLoss()
     loss_fn = nn.NLLLoss()
 
     total_loss = 0
@@ -80,7 +79,7 @@ def train(encoder, decoder, dataloader, conf):
             dec_opt.step()
 
             total_loss += _loss
-            if n_batch % 100 == 0:
+            if n_batch % 1000 == 0:
                 print('minibatch #{:4d}, average loss: {:4.4f}'.format(
                     n_batch, total_loss / (n_batch - ooms) / batch_size))
 
@@ -180,9 +179,6 @@ def main():
             if conf.cuda:
                 encoder.cuda()
                 decoder.cuda()
-
-    #torch.save(encoder.cpu(), save_name+'_encoder')
-    #torch.save(decoder.cpu(), save_name+'_decoder')
 
 
 if __name__ == '__main__':
